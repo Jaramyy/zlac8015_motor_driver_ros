@@ -11,6 +11,7 @@ find_package(catkin REQUIRED COMPONENTS
     roscpp
     sensor_msgs
     std_msgs
+    geometry_msgs
 )
 # set(modbus_DIR "/usr/local/lib")
 # find_package(
@@ -120,7 +121,7 @@ catkin_package(
 
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
-# include_directories(${catkin_INCLUDE_DIRS})
+include_directories(${catkin_INCLUDE_DIRS})
 
 # set(MODBUS_SOURCE include/libmodbus/src)
 # add_library(modbus_library ${MODBUS_SOURCE})
