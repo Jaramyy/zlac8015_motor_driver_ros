@@ -7,7 +7,7 @@
 //#include <tf/tf.h>
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2_ros/transform_broadcaster.h>
-
+#include <geometry_msgs/TransformStamped.h>
 struct wheel_travel
 {
    float left = 0.0 ,right = 0.0;
@@ -150,7 +150,7 @@ zlac8015_controller::zlac8015_controller()
 {  
    ROS_WARN("motor driver connecting");
    int device_ID = 1;
-   ctx = modbus_new_rtu("/dev/ttyUSB0", 115200, 'N', 8, 1);
+   ctx = modbus_new_rtu("/dev/ttyUSB1", 115200, 'N', 8, 1);
    if (ctx == NULL) {
       ROS_FATAL("Unable to create the libmodbus context");
       return;
@@ -340,7 +340,7 @@ void zlac8015_controller::diffDriveController()
    int command_left,command_right;
    command_left = (vel.linear.x - (vel.angular.z * base/2)) / wheel * rps_2_rpm;
    command_right = (vel.linear.x + (vel.angular.z * base/2)) / wheel * rps_2_rpm;  // RPS-> RPM (1/(2*pi))*60
-   set_rpm(command_left,command_right);
+   set_rpm(command_left,-command_right);
 }
 
 void zlac8015_controller::poseUpdate(zlac8015_controller &data)
@@ -348,19 +348,23 @@ void zlac8015_controller::poseUpdate(zlac8015_controller &data)
    wheel_meas =  data.get_wheel_travelled();
    // self.l_meter_meas, self.r_meter_meas = self.motors.get_wheels_travelled()
    l_meter = wheel_meas.left - l_meter_old;
-   r_meter = wheel_meas.right - r_meter_old;
+   r_meter = (-1*wheel_meas.right) - r_meter_old;
    ROS_INFO("l = %f , r = %f",l_meter,r_meter);
    // # print("L = ",self.l_meter,"R = ",self.r_meter)
 
-   cycleDistance = (r_meter + l_meter) / 2;
+    
+   
+   cycleDistance = (r_meter + l_meter) / 2.0;
    cycleAngle = asin((r_meter - l_meter) / base);       
-   avgAngle = (cycleAngle / 2) + odom_old.pose.pose.orientation.z;
-
+   avgAngle = (cycleAngle / 2.0) + odom_old.pose.pose.orientation.z;
+   
+   ROS_INFO("x = %f , y = %f",avgAngle  ,cycleDistance);
    // # Calculate the new pose (x, y, and theta)
    odom.pose.pose.position.x = odom_old.pose.pose.position.x + cos(avgAngle)*cycleDistance;
    odom.pose.pose.position.y = odom_old.pose.pose.position.y + sin(avgAngle)*cycleDistance;
    orientation_z = (cycleAngle + odom_old.pose.pose.orientation.z);
 
+   
    //odom_quat = tf.transformations.quaternion_from_euler(0, 0, (orientation_z));
    tf2::Quaternion q;      
    q.setRPY(0, 0, orientation_z);
@@ -373,7 +377,7 @@ void zlac8015_controller::poseUpdate(zlac8015_controller &data)
 
    odom.header.stamp = ros::Time::now();
    odom.header.frame_id = "odom";
-   odom.child_frame_id = "base_link";
+   odom.child_frame_id = "base_footprint";
    odom.twist.twist.linear.x  = cycleDistance/(odom.header.stamp.toSec() - odom_old.header.stamp.toSec());
    // # print(self.avgAngle)
    odom.twist.twist.angular.z = cycleAngle/(odom.header.stamp.toSec() - odom_old.header.stamp.toSec());
@@ -384,7 +388,22 @@ void zlac8015_controller::poseUpdate(zlac8015_controller &data)
    odom_old.pose.pose.orientation.z =  orientation_z;
    odom_old.header.stamp = odom.header.stamp;
    l_meter_old = wheel_meas.left;
-   r_meter_old = wheel_meas.right;
+   r_meter_old = (-1*wheel_meas.right);
+
+   static tf2_ros::TransformBroadcaster br;
+   geometry_msgs::TransformStamped transformStamped;
+
+   transformStamped.header.stamp = ros::Time::now();
+   transformStamped.header.frame_id = "odom";
+   transformStamped.child_frame_id =  "base_footprint";
+   transformStamped.transform.translation.x = odom.pose.pose.position.x;
+   transformStamped.transform.translation.y = odom.pose.pose.position.y;
+   transformStamped.transform.translation.z = 0.0;
+   transformStamped.transform.rotation.x = q.x();
+   transformStamped.transform.rotation.y = q.y();
+   transformStamped.transform.rotation.z = q.z();
+   transformStamped.transform.rotation.w = q.w();
+   br.sendTransform(transformStamped);
 
    // #Publish the odometry message
    pub_odom.publish(odom);
