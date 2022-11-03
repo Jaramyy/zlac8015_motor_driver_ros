@@ -12,6 +12,7 @@ find_package(catkin REQUIRED COMPONENTS
     sensor_msgs
     std_msgs
     geometry_msgs
+    tf2_ros
 )
 # set(modbus_DIR "/usr/local/lib")
 # find_package(
